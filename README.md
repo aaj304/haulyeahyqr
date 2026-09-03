@@ -76,6 +76,28 @@ itself deployed somewhere with a persistent filesystem and a real URL (see
 the database note below) — `localhost` isn't reachable from outside your
 machine.
 
+## Deploying to Railway
+
+1. **Push to GitHub** (already done if you're reading this from the repo).
+2. **New Project → Deploy from GitHub repo**, pick this repo/branch. Railway
+   detects Node automatically — no config file needed. It runs `npm install`
+   (which also generates the Prisma client), then `npm run build`, then
+   `npm run start` (which applies database migrations before serving).
+3. **Add a Volume** (service → *Settings* → *Volumes*) mounted at `/data`.
+   Without this the SQLite file gets wiped on every redeploy — Railway's
+   regular filesystem isn't persistent, only an attached Volume is.
+4. **Set environment variables** (service → *Variables*):
+   - `DATABASE_URL` = `file:/data/dev.db` (the volume path from step 3)
+   - `INGEST_API_TOKEN` = a generated token (see the automated-entry section
+     above) — only needed if you're wiring up the iMessage automation
+5. **Generate a public domain** (service → *Settings* → *Networking* →
+   *Generate Domain*) to get a `https://….up.railway.app` URL. That's the
+   app's real address — use it for both browsing the dashboard and as the
+   base URL for `/api/ingest`.
+
+Railway's exact button labels shift occasionally; if a step doesn't match
+what you see, describe what's on screen and it's easy to adjust.
+
 ## Project structure
 
 ```
@@ -91,15 +113,14 @@ src/components/            UI (charts, forms, tables, filters)
 
 ## Notes
 
-- **Database file**: SQLite stores everything in `dev.db` at the project
-  root (created by `prisma migrate dev`, gitignored). Back this file up —
-  it's the only copy of your data. This also means the app needs a
-  persistent filesystem to run on (a VPS, your own machine, a Docker
-  container, etc.) — not a serverless platform like Vercel's default
-  runtime, where the filesystem doesn't persist between requests. To
-  deploy there instead, swap the Prisma datasource for a hosted database
-  (e.g. Postgres or Turso/LibSQL) — everything else in the app stays the
-  same.
+- **Database file**: SQLite stores everything in one file (path set by
+  `DATABASE_URL`, gitignored). Back it up — it's the only copy of your
+  data. This also means the app needs a persistent filesystem to run on
+  (Railway with a Volume — see above — a VPS, your own machine, etc.) —
+  not a serverless platform like Vercel or Netlify's default runtime,
+  where the filesystem doesn't persist between requests. To deploy there
+  instead, swap the Prisma datasource for a hosted database (e.g. Postgres
+  or Turso/LibSQL) — everything else in the app stays the same.
 - **No login**: there's currently no authentication, so anyone who can
   reach the app can view and edit the ledger. Fine on a local machine or a
   private network; add auth (or put it behind a VPN/reverse-proxy login)
