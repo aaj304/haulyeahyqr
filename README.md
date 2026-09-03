@@ -46,6 +46,36 @@ npm run start
   Worker Pay, Insurance & Permits, Tires, Other. Edit
   `src/lib/categories.ts` to change these.
 
+## Automated entry (iMessage, etc.)
+
+`POST /api/ingest` accepts the same fields as the transaction form (`date`,
+`type`, `category`, `amount`, and optionally `description`/`payee`/
+`paymentMethod`) as JSON, authenticated with a bearer token:
+
+```bash
+curl -X POST https://your-deployed-app/api/ingest \
+  -H "Authorization: Bearer $INGEST_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"date":"2026-09-03","type":"EXPENSE","category":"Fuel","amount":123.45,"payee":"Petro-Canada"}'
+```
+
+It's separate from the routes the browser UI calls, exists specifically for
+external automation (like a "text an expense, it shows up on the dashboard"
+pipeline), and refuses every request unless `INGEST_API_TOKEN` is set in the
+environment — generate one with
+`node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))"`.
+Without that variable set, the endpoint is disabled and the rest of the app
+is unaffected.
+
+This route is the receiving end only. Turning "text a message" into a
+request here — reading the message, deciding it's a transaction, mapping it
+to a valid category, calling this endpoint, replying with a confirmation —
+is the automation side, which needs its own always-on place to run (for
+Claude Code users, a scheduled Routine works well). It also needs the app
+itself deployed somewhere with a persistent filesystem and a real URL (see
+the database note below) — `localhost` isn't reachable from outside your
+machine.
+
 ## Project structure
 
 ```
