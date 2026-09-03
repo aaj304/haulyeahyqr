@@ -1,0 +1,32 @@
+// Prisma schema for Haul Yeah YQR revenue/expense tracking.
+// Learn more: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// A single ledger of money in (REVENUE) and money out (EXPENSE).
+// `type` and `category` are plain strings (SQLite has no enum type);
+// the allowed values are enforced in src/lib/categories.ts + zod schemas.
+model Transaction {
+  id            Int      @id @default(autoincrement())
+  date          DateTime
+  type          String
+  category      String
+  amount        Float
+  description   String?
+  payee         String?
+  paymentMethod String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([date])
+  @@index([type])
+  @@index([category])
+}
