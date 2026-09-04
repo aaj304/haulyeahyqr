@@ -80,3 +80,17 @@ export function previousPeriod(range: DateRange): DateRange | null {
   const prevFrom = new Date(prevTo.getTime() - lengthMs);
   return { from: prevFrom, to: prevTo };
 }
+
+export const TREND_RANGE_OPTIONS = [
+  { value: 1, label: "1M" },
+  { value: 3, label: "3M" },
+  { value: 12, label: "12M" },
+] as const;
+
+export type TrendRangeMonths = (typeof TREND_RANGE_OPTIONS)[number]["value"];
+
+export const DEFAULT_TREND_RANGE_MONTHS: TrendRangeMonths = 12;
+
+export function isTrendRangeMonths(value: number): value is TrendRangeMonths {
+  return TREND_RANGE_OPTIONS.some((o) => o.value === value);
+}

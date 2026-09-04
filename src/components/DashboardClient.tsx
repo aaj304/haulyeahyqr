@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { DateRangeFilter } from "@/components/DateRangeFilter";
 import { StatTile } from "@/components/StatTile";
@@ -10,24 +10,34 @@ import { TransactionTypeBadge } from "@/components/TransactionTypeBadge";
 import { EmptyState } from "@/components/EmptyState";
 import { formatCurrency, formatDate } from "@/lib/format";
 import type { DashboardSummary } from "@/lib/data";
-import type { DateRangePreset } from "@/lib/dateRanges";
+import type { DateRangePreset, TrendRangeMonths } from "@/lib/dateRanges";
 
 interface DashboardClientProps {
   initialPreset: DateRangePreset;
+  initialTrendMonths: TrendRangeMonths;
   initialSummary: DashboardSummary;
 }
 
-export function DashboardClient({ initialPreset, initialSummary }: DashboardClientProps) {
+export function DashboardClient({
+  initialPreset,
+  initialTrendMonths,
+  initialSummary,
+}: DashboardClientProps) {
   const [preset, setPreset] = useState<DateRangePreset>(initialPreset);
+  const [trendMonths, setTrendMonths] = useState<TrendRangeMonths>(initialTrendMonths);
   const [summary, setSummary] = useState<DashboardSummary>(initialSummary);
   const [isPending, startTransition] = useTransition();
+  const isFirstRender = useRef(true);
 
   useEffect(() => {
-    if (preset === initialPreset) return;
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
     let cancelled = false;
 
     startTransition(() => {
-      fetch(`/api/summary?preset=${preset}`)
+      fetch(`/api/summary?preset=${preset}&trendMonths=${trendMonths}`)
         .then((res) => res.json())
         .then((data: { summary: DashboardSummary }) => {
           if (!cancelled) setSummary(data.summary);
@@ -40,9 +50,7 @@ export function DashboardClient({ initialPreset, initialSummary }: DashboardClie
     return () => {
       cancelled = true;
     };
-    // initialPreset intentionally excluded: it should only gate the very first change.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [preset]);
+  }, [preset, trendMonths]);
 
   const { current, previous, expenseByCategory, monthlyTrend, recentTransactions } = summary;
 
@@ -80,7 +88,7 @@ export function DashboardClient({ initialPreset, initialSummary }: DashboardClie
           />
         </div>
 
-        <TrendChart data={monthlyTrend} />
+        <TrendChart data={monthlyTrend} months={trendMonths} onMonthsChange={setTrendMonths} />
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <CategoryBreakdownChart data={expenseByCategory} />

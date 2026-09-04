@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDashboardSummary } from "@/lib/data";
 import {
   DEFAULT_DATE_RANGE_PRESET,
+  DEFAULT_TREND_RANGE_MONTHS,
   isDateRangePreset,
+  isTrendRangeMonths,
   resolveDateRangePreset,
 } from "@/lib/dateRanges";
 
@@ -14,8 +16,13 @@ export async function GET(request: NextRequest) {
     ? presetParam
     : DEFAULT_DATE_RANGE_PRESET;
 
-  const range = resolveDateRangePreset(preset);
-  const summary = await getDashboardSummary(range);
+  const trendMonthsParam = Number(request.nextUrl.searchParams.get("trendMonths"));
+  const trendMonths = isTrendRangeMonths(trendMonthsParam)
+    ? trendMonthsParam
+    : DEFAULT_TREND_RANGE_MONTHS;
 
-  return NextResponse.json({ preset, summary });
+  const range = resolveDateRangePreset(preset);
+  const summary = await getDashboardSummary(range, trendMonths);
+
+  return NextResponse.json({ preset, trendMonths, summary });
 }
