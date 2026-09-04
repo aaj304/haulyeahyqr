@@ -46,7 +46,7 @@ npm run start
   Worker Pay, Insurance & Permits, Tires, Other. Edit
   `src/lib/categories.ts` to change these.
 
-## Automated entry (iMessage, etc.)
+## Automated entry (generic ingest API)
 
 `POST /api/ingest` accepts the same fields as the transaction form (`date`,
 `type`, `category`, `amount`, and optionally `description`/`payee`/
@@ -59,22 +59,14 @@ curl -X POST https://your-deployed-app/api/ingest \
   -d '{"date":"2026-09-03","type":"EXPENSE","category":"Fuel","amount":123.45,"payee":"Petro-Canada"}'
 ```
 
-It's separate from the routes the browser UI calls, exists specifically for
-external automation (like a "text an expense, it shows up on the dashboard"
-pipeline), and refuses every request unless `INGEST_API_TOKEN` is set in the
-environment — generate one with
+It's separate from the routes the browser UI calls, exists for wiring up any
+future external automation, and refuses every request unless
+`INGEST_API_TOKEN` is set in the environment — generate one with
 `node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))"`.
 Without that variable set, the endpoint is disabled and the rest of the app
-is unaffected.
-
-This route is the receiving end only. Turning "text a message" into a
-request here — reading the message, deciding it's a transaction, mapping it
-to a valid category, calling this endpoint, replying with a confirmation —
-is the automation side, which needs its own always-on place to run (for
-Claude Code users, a scheduled Routine works well). It also needs the app
-itself deployed somewhere with a persistent filesystem and a real URL (see
-the database note below) — `localhost` isn't reachable from outside your
-machine.
+is unaffected. Nothing currently calls this route — the SMS/Twilio path
+below is the live automation — but it's available if you want to wire up
+another one later.
 
 ## Automated entry (SMS via Twilio + the Claude API)
 
@@ -109,8 +101,8 @@ account** can only text verified numbers and prepends a "sent from a trial
 account" notice to every reply - upgrade (add billing) once you're past
 testing with your own phone.
 
-This and the iMessage path (above) both write through the same validation
-and land in the same ledger - use either, or both.
+This is the live automation path - it writes through the same validation
+and lands in the same ledger as the generic ingest API (above).
 
 ## Deploying to Railway
 
@@ -124,11 +116,12 @@ and land in the same ledger - use either, or both.
    regular filesystem isn't persistent, only an attached Volume is.
 4. **Set environment variables** (service → *Variables*):
    - `DATABASE_URL` = `file:/data/dev.db` (the volume path from step 3)
-   - `INGEST_API_TOKEN` = a generated token — only needed for the iMessage
-     automation (see above)
-   - `ANTHROPIC_API_KEY`, `TWILIO_AUTH_TOKEN`, `PUBLIC_APP_URL` — only
-     needed for the SMS automation (see above); set `PUBLIC_APP_URL` after
-     step 5, once you know the domain
+   - `ANTHROPIC_API_KEY`, `TWILIO_AUTH_TOKEN`, `PUBLIC_APP_URL` — needed for
+     the SMS automation (see above); set `PUBLIC_APP_URL` after step 5, once
+     you know the domain
+   - `INGEST_API_TOKEN` = a generated token — only needed if you wire up
+     another automation against `/api/ingest` (see above); leave unset
+     otherwise
 5. **Generate a public domain** (service → *Settings* → *Networking* →
    *Generate Domain*) to get a `https://….up.railway.app` URL. That's the
    app's real address — use it for browsing the dashboard and as the base

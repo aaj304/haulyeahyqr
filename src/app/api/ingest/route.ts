@@ -5,7 +5,7 @@ import { transactionInputSchema } from "@/lib/validation";
 export const dynamic = "force-dynamic";
 
 /**
- * Machine-to-machine transaction entry point (e.g. the iMessage automation),
+ * Machine-to-machine transaction entry point for external automations,
  * separate from /api/transactions so the browser UI's unauthenticated path
  * is untouched. Fails closed: no token configured means no writes accepted,
  * since this route is meant to be reachable from outside the browser.
