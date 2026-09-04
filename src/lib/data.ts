@@ -6,7 +6,9 @@ import {
   endOfMonthUTC,
   startOfMonthUTC,
   previousPeriod,
+  DEFAULT_TREND_RANGE_MONTHS,
   type DateRange,
+  type TrendRangeMonths,
 } from "@/lib/dateRanges";
 
 export interface TransactionFilters {
@@ -82,8 +84,6 @@ export interface DashboardSummary {
   recentTransactions: ClientTransaction[];
 }
 
-const TREND_MONTHS = 12;
-
 function sumByType(transactions: { type: string; amount: number }[]): SummaryTotals {
   let revenue = 0;
   let expenses = 0;
@@ -100,10 +100,13 @@ function withinRange(date: Date, range: DateRange): boolean {
   return true;
 }
 
-export async function getDashboardSummary(range: DateRange): Promise<DashboardSummary> {
+export async function getDashboardSummary(
+  range: DateRange,
+  trendMonths: TrendRangeMonths = DEFAULT_TREND_RANGE_MONTHS
+): Promise<DashboardSummary> {
   const previous = previousPeriod(range);
   const now = new Date();
-  const trendStart = startOfMonthUTC(addMonthsUTC(now, -(TREND_MONTHS - 1)));
+  const trendStart = startOfMonthUTC(addMonthsUTC(now, -(trendMonths - 1)));
   const trendEnd = endOfMonthUTC(now);
 
   const lowerBounds = [range.from, previous?.from ?? null, trendStart].filter(
@@ -133,7 +136,7 @@ export async function getDashboardSummary(range: DateRange): Promise<DashboardSu
     .sort((a, b) => b.amount - a.amount);
 
   const monthlyTrend: MonthlyTrendEntry[] = [];
-  for (let i = TREND_MONTHS - 1; i >= 0; i--) {
+  for (let i = trendMonths - 1; i >= 0; i--) {
     const monthStart = startOfMonthUTC(addMonthsUTC(now, -i));
     const monthEnd = endOfMonthUTC(monthStart);
     const totals = sumByType(rows.filter((t) => t.date >= monthStart && t.date <= monthEnd));
