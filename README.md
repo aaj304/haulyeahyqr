@@ -76,6 +76,42 @@ itself deployed somewhere with a persistent filesystem and a real URL (see
 the database note below) — `localhost` isn't reachable from outside your
 machine.
 
+## Automated entry (SMS via Twilio + the Claude API)
+
+`POST /api/sms-webhook` is a self-contained alternative to the above: point
+a Twilio phone number's messaging webhook at it, and the app itself — no
+separate automation needed — reads each incoming text, calls the Claude API
+to figure out whether it's a transaction (or several - it splits a message
+like `"$40 fuel, $500 for the yorkton run, all sept 2"` into two), logs
+whatever it's confident about, and texts back a confirmation. When it's
+genuinely unsure (amount or revenue/expense direction unclear), it texts
+back a question instead of guessing.
+
+Setup:
+
+1. **A Twilio account and phone number.** Buy one from the
+   [Twilio console](https://console.twilio.com) (Phone Numbers → Buy a
+   number) - texting-capable, any area code.
+2. **Point the number's webhook at this app.** In the number's
+   configuration, under *Messaging*, set "A message comes in" to
+   `https://your-deployed-app/api/sms-webhook`, method `HTTP POST`.
+3. **Set three environment variables** (all required together):
+   - `ANTHROPIC_API_KEY` - from [console.anthropic.com](https://console.anthropic.com)
+   - `TWILIO_AUTH_TOKEN` - from the Twilio console (Account → API keys &
+     tokens), used to verify a request genuinely came from Twilio
+   - `PUBLIC_APP_URL` - this app's own public URL, no trailing slash (must
+     match exactly what Twilio POSTs to, since its signature covers the
+     full URL)
+
+Leave any of the three unset and the endpoint responds `503` without
+touching the ledger - the rest of the app is unaffected. A **Twilio trial
+account** can only text verified numbers and prepends a "sent from a trial
+account" notice to every reply - upgrade (add billing) once you're past
+testing with your own phone.
+
+This and the iMessage path (above) both write through the same validation
+and land in the same ledger - use either, or both.
+
 ## Deploying to Railway
 
 1. **Push to GitHub** (already done if you're reading this from the repo).
@@ -88,12 +124,15 @@ machine.
    regular filesystem isn't persistent, only an attached Volume is.
 4. **Set environment variables** (service → *Variables*):
    - `DATABASE_URL` = `file:/data/dev.db` (the volume path from step 3)
-   - `INGEST_API_TOKEN` = a generated token (see the automated-entry section
-     above) — only needed if you're wiring up the iMessage automation
+   - `INGEST_API_TOKEN` = a generated token — only needed for the iMessage
+     automation (see above)
+   - `ANTHROPIC_API_KEY`, `TWILIO_AUTH_TOKEN`, `PUBLIC_APP_URL` — only
+     needed for the SMS automation (see above); set `PUBLIC_APP_URL` after
+     step 5, once you know the domain
 5. **Generate a public domain** (service → *Settings* → *Networking* →
    *Generate Domain*) to get a `https://….up.railway.app` URL. That's the
-   app's real address — use it for both browsing the dashboard and as the
-   base URL for `/api/ingest`.
+   app's real address — use it for browsing the dashboard and as the base
+   URL for `/api/ingest` and `/api/sms-webhook`.
 
 Railway's exact button labels shift occasionally; if a step doesn't match
 what you see, describe what's on screen and it's easy to adjust.
