@@ -126,7 +126,13 @@ export async function POST(request: NextRequest) {
 
   const logged: string[] = [];
   for (const candidate of extraction.transactions) {
-    const parsed = transactionInputSchema.safeParse(candidate);
+    // Structured outputs return absent optional fields as null, not undefined -
+    // transactionInputSchema's optional-string fields don't accept null.
+    const parsed = transactionInputSchema.safeParse({
+      ...candidate,
+      description: candidate.description ?? undefined,
+      payee: candidate.payee ?? undefined,
+    });
     if (!parsed.success) {
       console.error("Extracted transaction failed validation:", candidate, parsed.error.issues);
       continue;
