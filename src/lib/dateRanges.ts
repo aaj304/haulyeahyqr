@@ -94,3 +94,12 @@ export const DEFAULT_TREND_RANGE_MONTHS: TrendRangeMonths = 12;
 export function isTrendRangeMonths(value: number): value is TrendRangeMonths {
   return TREND_RANGE_OPTIONS.some((o) => o.value === value);
 }
+
+/** Inclusive N-day window ending today, e.g. daysBack=7 covers today + the 6 days before it. */
+export function daysAgoRangeUTC(daysBack: number, now: Date = new Date()): { from: Date; to: Date } {
+  const to = endOfDayUTC(now);
+  const from = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - (daysBack - 1))
+  );
+  return { from, to };
+}

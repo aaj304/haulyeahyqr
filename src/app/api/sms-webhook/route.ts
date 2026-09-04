@@ -5,8 +5,10 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { transactionInputSchema } from "@/lib/validation";
-import { ALL_CATEGORIES } from "@/lib/categories";
+import { ALL_CATEGORIES, EXPENSE_CATEGORIES } from "@/lib/categories";
 import { formatCurrency } from "@/lib/format";
+import { getReportSummary, type ReportSummary } from "@/lib/data";
+import { daysAgoRangeUTC } from "@/lib/dateRanges";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +23,26 @@ const ExtractedTransaction = z.object({
   payee: z.string().nullable(),
 });
 
+const ReportRequest = z.object({
+  daysBack: z
+    .number()
+    .int()
+    .min(1)
+    .max(366)
+    .describe(
+      "How many days back from today the requested period covers - e.g. 'this week' or 'last 7 days' = 7, 'today' = 1, 'this month' = days elapsed since the 1st, a named month = that many days."
+    ),
+  rangeLabel: z.string().describe("Short human label for the period, e.g. 'this week', 'last 30 days', 'today'"),
+  category: z
+    .enum(ALL_CATEGORIES as [string, ...string[]])
+    .nullable()
+    .describe("Set only if they asked about one specific category (e.g. 'fuel'). Null for an overall summary."),
+  typeFilter: z
+    .enum(["REVENUE", "EXPENSE"])
+    .nullable()
+    .describe("REVENUE if only asking about income, EXPENSE if only asking about spending, null for both."),
+});
+
 const ExtractionResult = z.object({
   transactions: z.array(ExtractedTransaction),
   clarificationNeeded: z
@@ -29,6 +51,9 @@ const ExtractionResult = z.object({
     .describe(
       "A short question to text back if part of the message is clearly about money but its amount or direction is genuinely ambiguous. Null if nothing needs clarifying."
     ),
+  reportRequest: ReportRequest.nullable().describe(
+    "Set if the message is asking a question about their existing data - a summary, a snapshot, a total, 'how much did I spend on X' - rather than (or in addition to) logging a new transaction."
+  ),
 });
 
 function emptyTwiml() {
@@ -69,7 +94,9 @@ The message may describe zero, one, or several transactions - the owner sometime
 
 For each transaction you can confidently identify: pick type (REVENUE if they got paid/earned money, EXPENSE if they spent money), the closest matching category, the amount as a plain number (strip $ and commas), the date in YYYY-MM-DD (default to today unless the message says otherwise), and a payee (who was paid, or who paid them, if a name/business is given) and short description when there's something worth keeping beyond category and amount.
 
-If the message doesn't describe any transaction at all (small talk, an unrelated task, a question), return an empty transactions array and leave clarificationNeeded null - do not guess.
+If the message is instead asking a question about their existing data - a summary, a snapshot, a total, "how much did I spend on fuel this week", "how's this month looking" - set reportRequest instead of adding anything to transactions. Do not invent numbers yourself; you're only extracting what period/category/type they're asking about, the app will look up the real figures.
+
+If the message doesn't describe any transaction and isn't a report request either (small talk, an unrelated task), return an empty transactions array and leave clarificationNeeded and reportRequest null - do not guess.
 
 If part of the message is clearly about money but you genuinely can't tell the amount or the revenue/expense direction, leave that part out of transactions and set clarificationNeeded to a short, specific question about just that part. Still include any other unambiguous transactions from the same message in transactions.
 
@@ -79,6 +106,40 @@ Message: "${body}"`,
   });
 
   return response.parsed_output;
+}
+
+function pluralTransactions(count: number): string {
+  return `${count} transaction${count === 1 ? "" : "s"}`;
+}
+
+function formatReportReply(
+  query: z.infer<typeof ReportRequest>,
+  summary: ReportSummary
+): string {
+  const { totals } = summary;
+
+  if (query.category) {
+    // A category's type is fixed (e.g. Fuel is always an expense) - derive it
+    // from the category itself rather than trusting a separately-extracted typeFilter.
+    const isExpenseCategory = (EXPENSE_CATEGORIES as readonly string[]).includes(query.category);
+    const total = isExpenseCategory ? totals.expenses : totals.revenue;
+    const verb = isExpenseCategory ? "spent" : "earned";
+    return `${query.category} ${query.rangeLabel}: ${formatCurrency(total)} ${verb} across ${pluralTransactions(totals.transactionCount)}.`;
+  }
+
+  if (query.typeFilter === "REVENUE") {
+    return `Revenue ${query.rangeLabel}: ${formatCurrency(totals.revenue)} across ${pluralTransactions(totals.transactionCount)}.`;
+  }
+
+  const topLine = summary.topExpenseCategories.length
+    ? ` Top: ${summary.topExpenseCategories.map((c) => `${c.category} ${formatCurrency(c.amount)}`).join(", ")}.`
+    : "";
+
+  if (query.typeFilter === "EXPENSE") {
+    return `Expenses ${query.rangeLabel}: ${formatCurrency(totals.expenses)}.${topLine}`;
+  }
+
+  return `${query.rangeLabel[0].toUpperCase()}${query.rangeLabel.slice(1)}: ${formatCurrency(totals.revenue)} revenue, ${formatCurrency(totals.expenses)} expenses, ${formatCurrency(totals.net)} net.${topLine}`;
 }
 
 export async function POST(request: NextRequest) {
@@ -148,6 +209,18 @@ export async function POST(request: NextRequest) {
   } else if (logged.length > 1) {
     replyParts.push(`Logged ${logged.length}: ${logged.join(", ")}.`);
   }
+
+  if (extraction.reportRequest) {
+    const { from, to } = daysAgoRangeUTC(extraction.reportRequest.daysBack);
+    const summary = await getReportSummary({
+      from,
+      to,
+      category: extraction.reportRequest.category ?? undefined,
+      type: extraction.reportRequest.typeFilter ?? undefined,
+    });
+    replyParts.push(formatReportReply(extraction.reportRequest, summary));
+  }
+
   if (extraction.clarificationNeeded) {
     replyParts.push(extraction.clarificationNeeded);
   }

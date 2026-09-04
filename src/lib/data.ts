@@ -84,7 +84,7 @@ export interface DashboardSummary {
   recentTransactions: ClientTransaction[];
 }
 
-function sumByType(transactions: { type: string; amount: number }[]): SummaryTotals {
+export function sumByType(transactions: { type: string; amount: number }[]): SummaryTotals {
   let revenue = 0;
   let expenses = 0;
   for (const t of transactions) {
@@ -155,4 +155,44 @@ export async function getDashboardSummary(
     monthlyTrend,
     recentTransactions: inCurrent.slice(0, 8),
   };
+}
+
+export interface ReportQuery {
+  from: Date;
+  to: Date;
+  category?: string;
+  type?: TransactionType;
+}
+
+export interface ReportSummary {
+  totals: SummaryTotals;
+  /** Only populated when the query has no category filter - a category total needs no further breakdown. */
+  topExpenseCategories: CategoryBreakdownEntry[];
+}
+
+/** Real numbers for a text-a-question report reply - never let an LLM state a figure this didn't compute. */
+export async function getReportSummary(query: ReportQuery): Promise<ReportSummary> {
+  const rows = await prisma.transaction.findMany({
+    where: {
+      date: { gte: query.from, lte: query.to },
+      ...(query.category ? { category: query.category } : {}),
+      ...(query.type ? { type: query.type } : {}),
+    },
+  });
+
+  const totals = sumByType(rows);
+
+  const topExpenseCategories = query.category
+    ? []
+    : EXPENSE_CATEGORIES.map((category) => ({
+        category,
+        amount: rows
+          .filter((t) => t.type === "EXPENSE" && t.category === category)
+          .reduce((sum, t) => sum + t.amount, 0),
+      }))
+        .filter((entry) => entry.amount > 0)
+        .sort((a, b) => b.amount - a.amount)
+        .slice(0, 3);
+
+  return { totals, topExpenseCategories };
 }
