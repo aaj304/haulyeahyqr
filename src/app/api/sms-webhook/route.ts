@@ -73,10 +73,12 @@ function replyTwiml(text: string) {
 
 async function extractTransactions(body: string, today: string) {
   const response = await anthropic.messages.parse({
-    model: "claude-opus-5",
+    // Cheapest current model - this only extracts a few structured fields
+    // from a short text, which doesn't need a larger model. (`effort` is
+    // dropped here too: it errors on this model instead of Opus's `low`.)
+    model: "claude-haiku-4-5",
     max_tokens: 2048,
     output_config: {
-      effort: "low",
       format: zodOutputFormat(ExtractionResult),
     },
     messages: [
